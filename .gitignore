@@ -9,3 +9,5 @@ __pycache__/
 # ignore python egg files
 *.egg
 /.venv
+# omit streamlit cache and secrets
+/.streamlit/

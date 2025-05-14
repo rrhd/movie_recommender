@@ -1,0 +1,10 @@
+# ignore anything in the artifact directory
+/artifacts/
+# ignore pycharm project files
+.idea/
+# ignore python cache files
+__pycache__/
+# ignore python bytecode files
+*.pyc
+# ignore python egg files
+*.egg

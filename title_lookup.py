@@ -27,18 +27,64 @@ VECTORIZER_JOBLIB = ARTIFACTS_DIR / "title_vectorizer.joblib"
 TFIDF_NPZ = ARTIFACTS_DIR / "title_tfidf.npz"
 ORIG_TITLES_PKL = ARTIFACTS_DIR / "title_lookup_orig.pkl"
 YEAR_MAP_PKL = ARTIFACTS_DIR / "title_year_map.pkl"
+
+# Suffix for the lightweight input file
+LIGHTWEIGHT_INPUT_SUFFIX = "_light_lookup.pkl"
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logger = logging.getLogger("title_lookup")
 
 
 def build_lookup(pkl_path: Path = META_PKL, out_json: Path = LOOKUP_JSON) -> None:
     """Offline: build title lookup + TF-IDF index + original titles map."""
-    if not pkl_path.exists():
-        sys.exit(f"[ERR] metadata pickle not found: {pkl_path}")
-    import pandas as pd
 
-    raw = pickle.load(open(pkl_path, "rb"))
-    df = pd.DataFrame(raw) if isinstance(raw, list) else raw
+    script_dir = Path(__file__).parent
+    lightweight_input_filename = f"{pkl_path.stem}{LIGHTWEIGHT_INPUT_SUFFIX}"
+    lightweight_input_pkl_path = script_dir / lightweight_input_filename
+    df = None
+
+    # Try to load lightweight version first if it's valid and up-to-date
+    if lightweight_input_pkl_path.exists():
+        if pkl_path.exists():
+            if lightweight_input_pkl_path.stat().st_mtime >= pkl_path.stat().st_mtime:
+                logger.info("Found up-to-date lightweight input: %s. Loading it.", lightweight_input_pkl_path.name)
+                try:
+                    df = pd.read_pickle(lightweight_input_pkl_path)
+                except Exception as e:
+                    logger.warning("Failed to load %s: %s. Will try to rebuild from %s.", lightweight_input_pkl_path.name, e, pkl_path.name)
+                    df = None # Ensure df is None so it gets rebuilt
+            else:
+                logger.info("Lightweight input %s is older than %s. Will rebuild.", lightweight_input_pkl_path.name, pkl_path.name)
+        else:
+            # Original pkl_path (source) doesn't exist. build_lookup needs the source.
+            logger.error("Source metadata pickle %s not found. Cannot build, even if %s exists.", pkl_path.name, lightweight_input_pkl_path.name)
+            sys.exit(f"[ERR] Source metadata pickle not found: {pkl_path}")
+
+    if df is None: # Need to load from pkl_path and create/update lightweight version
+        if not pkl_path.exists():
+            sys.exit(f"[ERR] Source metadata pickle not found: {pkl_path}. Cannot build.")
+
+        logger.info("Loading full data from %s to create/update lightweight version.", pkl_path.name)
+        raw_full = pickle.load(open(pkl_path, "rb"))
+        df_full = pd.DataFrame(raw_full) if isinstance(raw_full, list) else raw_full
+
+        required_cols = ["imdb_id", "title", "year"]
+        missing_cols = [col for col in required_cols if col not in df_full.columns]
+        if missing_cols:
+            sys.exit(f"[ERR] Missing required columns {missing_cols} in {pkl_path.name}")
+
+        df_for_lightweight = df_full[required_cols].copy()
+
+        try:
+            lightweight_input_pkl_path.parent.mkdir(exist_ok=True, parents=True)
+            df_for_lightweight.to_pickle(lightweight_input_pkl_path)
+            logger.info("SAVED lightweight input data → %s", lightweight_input_pkl_path.name)
+        except Exception as e:
+            logger.error("Failed to save lightweight input data to %s: %s", lightweight_input_pkl_path.name, e)
+            # Proceed with df_for_lightweight in memory if saving failed, but log error
+        df = df_for_lightweight
+
+    # Proceed with df (loaded from lightweight or freshly processed)
     df = df.dropna(subset=["imdb_id", "title"])
     df["title_lc"] = df["title"].str.lower()
 
@@ -52,7 +98,7 @@ def build_lookup(pkl_path: Path = META_PKL, out_json: Path = LOOKUP_JSON) -> Non
 
     # 2) TF-IDF char-ngrams
     vec = TfidfVectorizer(analyzer="char_wb", ngram_range=(2, 4))
-    X = vec.fit_transform(titles_lc)
+    X = vec.fit_transform(titles_lc) # titles_lc is from the (potentially lightweight) df
     joblib.dump(vec, VECTORIZER_JOBLIB)
     sp.save_npz(TFIDF_NPZ, X)
     logger.info(
@@ -80,6 +126,8 @@ def _ensure_loaded() -> None:
     global _ID2LC, _IDS, _VEC, _X, _ORIG_MAP, _YEAR_MAP
     if _ID2LC:  # already done
         return
+    if not LOOKUP_JSON.exists():
+        sys.exit(f"[ERR] Lookup JSON {LOOKUP_JSON.name} not found. Please run --build.")
     _ID2LC = json.loads(LOOKUP_JSON.read_text())
     _IDS = list(_ID2LC.keys())
     _VEC = joblib.load(VECTORIZER_JOBLIB)
@@ -141,7 +189,7 @@ def fuzzy_match_one(
         if pref:
             # pick the one with highest fuzzy score instead of shortest
             scores = {
-                i: fuzz.WRatio(bare, _strip_articles(_ID2LC[_IDS[i]])) # <<< 여기가 수정된 부분입니다
+                i: fuzz.WRatio(bare, _strip_articles(_ID2LC[_IDS[i]]))
                 for i in pref
             }
             best = max(scores, key=scores.get)
@@ -164,7 +212,8 @@ def fuzzy_match_one(
         return _IDS[i], _ORIG_MAP.get(_IDS[i], _ID2LC[_IDS[i]].title()), 0.9
 
     # --- 3) TF-IDF fallback ---
-    if _VEC is None or _X is None:
+    if _VEC is None or _X is None: # Should not happen if _ensure_loaded worked
+        logger.warning("TF-IDF vectorizer or matrix not loaded, TF-IDF fallback unavailable.")
         return None, None, 0.0
 
     qv = _VEC.transform([ql])  # 1×F
@@ -192,10 +241,12 @@ def match_many(queries: Iterable[str]) -> Tuple[List[Tuple[str, str]], List[str]
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Build / use title lookup")
     p.add_argument("--build", action="store_true", help="(re)generate everything")
-    p.add_argument("--pkl", type=Path, default=META_PKL, help="enriched_movies.pkl")
-    p.add_argument("--out", type=Path, default=LOOKUP_JSON, help="lookup.json")
+    p.add_argument("--pkl", type=Path, default=META_PKL, help="Path to enriched_movies.pkl or similar.")
+    p.add_argument("--out", type=Path, default=LOOKUP_JSON, help="Path to output lookup.json.")
     p.add_argument("titles", nargs="*", help="titles to test (omit for --build)")
     args = p.parse_args()
+
+    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True) # Ensure ARTIFACTS_DIR exists for storing outputs
 
     if args.build:
         build_lookup(args.pkl, args.out)
@@ -204,6 +255,7 @@ if __name__ == "__main__":
         p.print_help()
         sys.exit(1)
 
+    _ensure_loaded() # Ensure data is loaded for matching if not building
     found, missing = match_many(args.titles)
     print("\nMatched:")
     for _id, ttl in found:

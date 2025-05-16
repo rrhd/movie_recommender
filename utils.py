@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from typing import List, Tuple
-from title_lookup import match_many, fuzzy_match_one
 
-
+from streamlit_app import match_many
 
 
 def resolve_lines(lines: List[str]) -> Tuple[List[Tuple[str, str, str]], List[str]]:

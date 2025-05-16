@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 push_svd_vectors_to_pinecone.py
 --------------------------------
@@ -29,26 +28,20 @@ import pandas as pd
 import scipy.stats as st
 from pinecone import Pinecone, ServerlessSpec, PineconeException
 
-# ──────────────────────────────────────────────────────────────────────────────
-# CONFIG
-# ──────────────────────────────────────────────────────────────────────────────
+
 ARTIFACTS_DIR = Path(__file__).parent / "artifacts"
 
 VEC_PATH = ARTIFACTS_DIR / "final_feature_vectors.npy"
 IDMAP_PATH = ARTIFACTS_DIR / "final_feature_id_map.pkl"
-META_PATH = ARTIFACTS_DIR / "enriched_movies.pkl"  # optional
-ZSCORE_DB_PATH = ARTIFACTS_DIR / "movie_database.db"  # optional
+META_PATH = ARTIFACTS_DIR / "enriched_movies.pkl"
+ZSCORE_DB_PATH = ARTIFACTS_DIR / "movie_database.db"
 
 SECRETS_FILE = Path(__file__).parent / ".streamlit" / "secrets.toml"
-BATCH_SZ = 100  # ≈ 0.8 MB per batch
+BATCH_SZ = 100
 SPEC = ServerlessSpec(cloud="aws", region="us-east-1")
-METRIC = "cosine"  # must match training
-# ──────────────────────────────────────────────────────────────────────────────
+METRIC = "cosine"
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# helpers
-# ══════════════════════════════════════════════════════════════════════════════
 def load_secrets(path: Path) -> dict[str, Any]:
     if not path.is_file():
         sys.exit(f"[ERR] secrets.toml not found: {path.resolve()}")
@@ -65,7 +58,7 @@ def ensure_index(pc: Pinecone, name: str, dim: int) -> None:
     if name not in existing:
         print(f"[SETUP] creating Pinecone index '{name}' …")
         pc.create_index(name=name, dimension=dim, metric=METRIC, spec=SPEC)
-        # wait until ready (≤ 2 min)
+
         for waited in range(0, 125, 5):
             if pc.describe_index(name).status["ready"]:
                 print("[SETUP] index ready.")
@@ -98,7 +91,6 @@ def scale_z(z: float | int | None) -> float | None:
     return round(float(st.norm.cdf(float(z))) * 10, 2)
 
 
-# ── helpers local to the upload loop ───────────────────────────────────────
 def safe_int(v):
     try:
         if v is None or (isinstance(v, float) and pd.isna(v)):
@@ -134,19 +126,11 @@ def safe_list(v):
     return []
 
 
-# ───────────────────────────────────────────────────────────────────────────
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# main
-# ══════════════════════════════════════════════════════════════════════════════
 def main() -> None:
-    # ── secrets ────────────────────────────────────────────────────────────
     sec = load_secrets(SECRETS_FILE)
     api_key = sec["PINECONE_API_KEY"]
     index_name = sec["PINECONE_INDEX_NAME"]
 
-    # ── vectors + id-map ───────────────────────────────────────────────────
     print(f"[LOAD] vectors → {VEC_PATH}")
     vecs: np.ndarray = np.load(VEC_PATH)
     dim = vecs.shape[1]
@@ -157,14 +141,12 @@ def main() -> None:
     if vecs.shape[0] != len(id_map):
         sys.exit("[ERR] vector count and id-map length differ!")
 
-    # ── metadata frame / dict ──────────────────────────────────────────────
     meta: dict[str, dict] = {}
 
     if META_PATH.exists():
         print(f"[LOAD] metadata → {META_PATH}")
         raw = pickle.load(META_PATH.open("rb"))
 
-        # dataframe
         if isinstance(raw, pd.DataFrame):
             if "imdb_id" in raw.columns:
                 df = raw.copy()
@@ -172,7 +154,6 @@ def main() -> None:
                 print("[WARN] DataFrame missing 'imdb_id' – skipping metadata.")
                 df = pd.DataFrame()
 
-        # list[dict]
         elif isinstance(raw, list):
             df = pd.DataFrame(raw)
             if "imdb_id" not in df.columns:
@@ -196,14 +177,13 @@ def main() -> None:
                 )
                 if c in df.columns
             ]
-            # numeric cleanup
+
             for col in ("year", "rating", "votes"):
                 if col in want:
                     df[col] = pd.to_numeric(df[col], errors="coerce")
 
             meta = df[["imdb_id", *want]].set_index("imdb_id").to_dict("index")
 
-    # ── z-scores (optional) ────────────────────────────────────────────────
     if ZSCORE_DB_PATH.exists():
         try:
             con = sqlite3.connect(f"file:{ZSCORE_DB_PATH.resolve()}?mode=ro", uri=True)
@@ -224,13 +204,11 @@ def main() -> None:
 
     print(f"[OK] metadata dict entries: {len(meta)}")
 
-    # ── Pinecone setup ─────────────────────────────────────────────────────
     print("[INIT] Pinecone client …")
     pc = Pinecone(api_key=api_key)
     ensure_index(pc, index_name, dim)
     index = pc.Index(index_name)
 
-    # ── stream upload ──────────────────────────────────────────────────────
     total = vecs.shape[0]
     print(f"[UPSERT] {total} vectors ({dim}-d) → index '{index_name}'")
     uploaded = 0
@@ -238,7 +216,7 @@ def main() -> None:
     for rng in chunked(range(total), BATCH_SZ):
         payload = []
         for i in rng:
-            imdb_id = id_map[i]  # human-friendly vector id
+            imdb_id = id_map[i]
             vec = vecs[i].tolist()
             m_raw = meta.get(imdb_id, {})
 
@@ -253,7 +231,6 @@ def main() -> None:
                 "languages": safe_list(m_raw.get("languages")),
             }
 
-            # prune empty fields
             m = {k: v for k, v in m.items() if v not in (None, [], "", {})}
 
             payload.append((imdb_id, vec, m))
@@ -269,6 +246,5 @@ def main() -> None:
     print(f"\n[DONE] all vectors uploaded ✔ ({total})")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     main()

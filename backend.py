@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 backend.py  –  fast(er) Pinecone recall  ➜  re-score  ➜  diversify  ➜  filter
 
@@ -9,6 +8,7 @@ Key upgrades
 • vectors cached in-process (LRU) to avoid re-download
 • **Maximal Marginal Relevance (MMR)** for result diversification
 """
+
 import asyncio
 import functools
 import logging
@@ -23,14 +23,14 @@ from cachetools import LRUCache, cached
 from pinecone import PineconeException, PineconeAsyncio
 
 from pinecone_client import INDEX, DIM, PINECONE_API_KEY, PINECONE_INDEX_NAME
+
 SCRIPT_DIR_BE = Path(__file__).parent
-# ───────────────────────────────────────────────────────────────────────────────
-# constants / knobs
-# ───────────────────────────────────────────────────────────────────────────────
-RAW_K = 100  # neighborhood size per seed
-ALPHA = 1.0  # + weight for liked similarity
-BETA = 0.8  # – weight for dislike similarity
-MMR_LAMBDA = 0.70  # trade-off relevance / diversity
+
+
+RAW_K = 100
+ALPHA = 1.0
+BETA = 0.8
+MMR_LAMBDA = 0.70
 WORKERS = min(32, (os.cpu_count() or 8) * 2)
 
 ARTIFACTS = Path(__file__).parent / "artifacts"
@@ -40,14 +40,17 @@ try:
     TOKENS: Dict[str, set[str]] = pickle.load(open(TOK_PATH_RT, "rb"))
     logging.info(f"Successfully loaded tokens from {TOK_PATH_RT.name}")
 except FileNotFoundError:
-    logging.warning(f"{TOK_PATH_RT.name} missing – MMR diversity will use on-the-fly tokenisation or be affected.")
+    logging.warning(
+        f"{TOK_PATH_RT.name} missing – MMR diversity will use on-the-fly tokenisation or be affected."
+    )
     TOKENS = {}
 except Exception as e:
-    logging.error(f"Error loading {TOK_PATH_RT.name}: {e}. Falling back to empty tokens.")
+    logging.error(
+        f"Error loading {TOK_PATH_RT.name}: {e}. Falling back to empty tokens."
+    )
     TOKENS = {}
-# ───────────────────────────────────────────────────────────────────────────────
-# logging
-# ───────────────────────────────────────────────────────────────────────────────
+
+
 log = logging.getLogger("backend")
 if not log.handlers:
     logging.basicConfig(
@@ -86,9 +89,6 @@ def _cos(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / (n1 * n2))
 
 
-# ╔════════════════════════════════════════════════════════════════════════════╗
-# ║                       PARALLEL NEIGHBOURHOOD RECALL                        ║
-# ╚════════════════════════════════════════════════════════════════════════════╝
 def _query_seed(
     seed_id: str, disliked: set[str]
 ) -> list[tuple[str, float, list, dict]]:
@@ -115,16 +115,13 @@ async def _recall_parallel_async(
         return {}, {}, defaultdict(list)
 
     cand_meta: dict[str, dict] = {}
-    cand_vec:  dict[str, np.ndarray] = {}
+    cand_vec: dict[str, np.ndarray] = {}
     sim_likes: dict[str, list[float]] = defaultdict(list)
     dneg = set(disliked)
 
-    # open one async client & index, ensure both sessions get closed
     async with PineconeAsyncio(api_key=PINECONE_API_KEY) as pc:
-        # describe_index gives you the correct endpoint URL
         desc = await pc.describe_index(PINECONE_INDEX_NAME)
         async with pc.IndexAsyncio(host=desc.host) as idx:
-            # throttle so we don't spin up N sessions at once
             sem = asyncio.Semaphore(WORKERS)
 
             async def _sem_query(seed_id: str):
@@ -136,10 +133,8 @@ async def _recall_parallel_async(
                         include_metadata=True,
                     )
 
-            # fire off at most WORKERS concurrent queries
             responses = await asyncio.gather(*(_sem_query(s) for s in seeds))
 
-    # parse responses
     for seed_id, resp in zip(seeds, responses):
         is_like = seed_id in liked
         for m in resp.matches:
@@ -162,9 +157,6 @@ def _recall_parallel(
     return asyncio.run(_recall_parallel_async(liked, disliked))
 
 
-# ╔════════════════════════════════════════════════════════════════════════════╗
-# ║                    DIVERSITY: MMR HELPER FUNCTIONS                         ║
-# ╚════════════════════════════════════════════════════════════════════════════╝
 def _tokens(m: Dict[str, Any]) -> Set[str]:
     """Collect genre + decade tokens for a movie."""
     toks: Set[str] = set()
@@ -178,7 +170,7 @@ def _tokens(m: Dict[str, Any]) -> Set[str]:
     if isinstance(year, (int, float, str)):
         try:
             y = int(year)
-            toks.add(str(y)[:3])  # decade token
+            toks.add(str(y)[:3])
         except Exception:
             pass
     return toks
@@ -203,7 +195,7 @@ def _mmr_ranking(
     """
     selected: List[str] = []
     candidates = set(scores)
-    # precompute tokens
+
     toks = {cid: TOKENS.get(cid, set()) for cid in candidates}
 
     while candidates and len(selected) < k:
@@ -222,17 +214,13 @@ def _mmr_ranking(
     return selected
 
 
-# ╔════════════════════════════════════════════════════════════════════════════╗
-# ║                                PUBLIC API                                 ║
-# ╚════════════════════════════════════════════════════════════════════════════╝
-
-
 def _freeze(v):
     if isinstance(v, list):
         return tuple(v)
     if isinstance(v, dict):
         return tuple(sorted(v.items()))
     return v
+
 
 @functools.lru_cache(maxsize=2048)
 def _cached_recommend(likes_key, dislikes_key, filt_key):
@@ -244,9 +232,9 @@ def recommend(liked_ids: List[str], disliked_ids: List[str], **filters):
         return []
 
     filt_key = tuple(sorted((k, _freeze(v)) for k, v in filters.items()))
-    return _cached_recommend(tuple(sorted(liked_ids)),
-                             tuple(sorted(disliked_ids)),
-                             filt_key)
+    return _cached_recommend(
+        tuple(sorted(liked_ids)), tuple(sorted(disliked_ids)), filt_key
+    )
 
 
 def _recommend_inner(
@@ -254,12 +242,10 @@ def _recommend_inner(
     disliked_ids: List[str],
     *,
     top_k: int = 15,
-    # numeric filters
     min_year: int = None,
     min_rating: float = None,
     min_norm: float = None,
     min_votes: int = None,
-    # include / exclude
     include_genres: List[str] = None,
     exclude_genres: List[str] = None,
     include_countries: List[str] = None,
@@ -274,29 +260,27 @@ def _recommend_inner(
       • popularity / norm_rating  ← small prior (POP_W)
     Works even with only likes, only dislikes, or none.
     """
-    # ── 0) adaptive weights & prior -------------------------------------------
-    n_like, n_dis = len(liked_ids), len(disliked_ids)
-    alpha = ALPHA / max(1.0, np.log1p(n_like))  # log schedule
-    beta = 0.0 if n_dis == 0 else BETA / np.sqrt(n_dis)
-    pop_w = 0.05 if (n_like or n_dis) else 1.0  # full pop if no feedback
 
-    # ── 1) neighbourhood recall -----------------------------------------------
+    n_like, n_dis = len(liked_ids), len(disliked_ids)
+    alpha = ALPHA / max(1.0, np.log1p(n_like))
+    beta = 0.0 if n_dis == 0 else BETA / np.sqrt(n_dis)
+    pop_w = 0.05 if (n_like or n_dis) else 1.0
+
     cand_meta, cand_vec, sim_likes = _recall_parallel(liked_ids, disliked_ids)
-    if disliked_ids:  # pre-fetch for cache
+    if disliked_ids:
         _ = INDEX.fetch(ids=disliked_ids)
 
     cand_ids = set(cand_vec) - set(liked_ids) - set(disliked_ids)
     if not cand_ids:
         return []
 
-    # ── 2) scoring -------------------------------------------------------------
     dis_vecs = [_fetch_vec_cached(i) for i in disliked_ids]
     scores: Dict[str, float] = {}
     for cid in cand_ids:
         vec = cand_vec[cid]
         pos = float(np.mean(sim_likes[cid])) if sim_likes[cid] else 0.0
         if dis_vecs:
-            dv = np.stack(dis_vecs)  # d × dim
+            dv = np.stack(dis_vecs)
             neg = float(
                 (dv @ vec).mean()
                 / (np.linalg.norm(dv, axis=1).mean() * np.linalg.norm(vec))
@@ -306,7 +290,6 @@ def _recommend_inner(
         base = cand_meta[cid].get("norm_rating", 0.0)
         scores[cid] = alpha * pos - beta * neg + pop_w * base
 
-    # ── 3) hard filters --------------------------------------------------------
     def _keep(mid: str) -> bool:
         m = cand_meta.get(mid, {})
         if min_year and (m.get("year") or 0) < min_year:
@@ -347,12 +330,10 @@ def _recommend_inner(
     if not filtered:
         return []
 
-    # ── 4) diversity via MMR ---------------------------------------------------
     top_diverse = _mmr_ranking(
         {mid: scores[mid] for mid in filtered}, top_k, MMR_LAMBDA
     )
 
-    # ── 5) output --------------------------------------------------------------
     out: List[Dict[str, Any]] = []
     for mid in top_diverse:
         m = cand_meta.get(mid, {})
@@ -369,29 +350,7 @@ def _recommend_inner(
     return out
 
 
-# make example with input
-# Love Death and Robots
-# Reservation Dogs
-# Invincible
-# Foundation
-# American Crime Story
-# Dr. Brain
-# The Expanse
-# The Boys
-# Outer Range
-# Atlanta
-# Better Call Saul
-# Barry
-# Tehran
-# Severance
-# Rick and Morty
-# Solar Opposites
-# Harley Quinn
-# The Resort
-# Pantheon
-
 def main():
-    # Example usage
     liked_ids = ["tt1234567", "tt2345678"]
     disliked_ids = ["tt3456789"]
     filters = {

@@ -58,15 +58,10 @@ def main():
     )
     print("Recommendations:")
     for rec in recs:
-        #                 "title": m.get("title", "N/A"),
-        #                 "year": m.get("year", ""),
-        #                 "rating": m.get("rating", ""),
-        #                 "norm_rating": m.get("norm_rating", ""),
-        #                 "score": round(scores[mid], 4),
-        #                 "url": f"https://www.imdb.com/title/{mid}/",
         print(
             f"{rec['title']} ({rec['year']}) - {rec['rating']} - {rec['norm_rating']} - {rec['score']}"
         )
+
 
 if __name__ == "__main__":
     main()

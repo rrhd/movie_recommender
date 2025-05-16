@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Tuple
 
-from streamlit_app import match_many
+from title_lookup import fuzzy_match_one, match_many
 
 
 def resolve_lines(lines: List[str]) -> Tuple[List[Tuple[str, str, str]], List[str]]:

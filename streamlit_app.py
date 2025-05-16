@@ -249,36 +249,36 @@ if btn_preview:
         ok_like, miss_like = resolve_lines(likes_raw)
         ok_dis, miss_dis = resolve_lines(dislikes_raw)
 
-    if ok_like:
-        st.subheader("👍 We’ll search as Likes")
-        st.dataframe(
-            [
-                {
-                    "Input": i,
-                    "Matched title": f"{t} ({META_BY_ID.get(id_, {}).get('year', '')})",
-                }
-                for i, id_, t in ok_like
-            ],
-            use_container_width=True,
-            hide_index=True,
-        )
-    if ok_dis:
-        st.subheader("👎 We’ll avoid as Dislikes")
-        st.dataframe(
-            [
-                {
-                    "Input": i,
-                    "Matched title": f"{t} ({META_BY_ID.get(id_, {}).get('year', '')})",
-                }
-                for i, id_, t in ok_dis
-            ],
-            use_container_width=True,
-            hide_index=True,
-        )
+        if ok_like:
+            st.subheader("👍 We’ll search as Likes")
+            st.dataframe(
+                [
+                    {
+                        "Input": i,
+                        "Matched title": f"{t} ({META_BY_ID.get(id_, {}).get('year', '')})",
+                    }
+                    for i, id_, t in ok_like
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+        if ok_dis:
+            st.subheader("👎 We’ll avoid as Dislikes")
+            st.dataframe(
+                [
+                    {
+                        "Input": i,
+                        "Matched title": f"{t} ({META_BY_ID.get(id_, {}).get('year', '')})",
+                    }
+                    for i, id_, t in ok_dis
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
 
-    if miss_like or miss_dis:
-        st.subheader("⚠ Not recognised")
-        st.warning("\n".join(miss_like + miss_dis))
+        if miss_like or miss_dis:
+            st.subheader("⚠ Not recognised")
+            st.warning("\n".join(miss_like + miss_dis))
 
 # ═══════════════════════════════════  2) recommend  ═══════════════════════════
 if btn_recommend:
@@ -288,32 +288,31 @@ if btn_recommend:
         ok_like, miss_like = resolve_lines(likes_raw)
         ok_dis, miss_dis = resolve_lines(dislikes_raw)
 
-    liked_ids = [imdb for _raw, imdb, _ in ok_like]
-    disliked_ids = [imdb for _raw, imdb, _ in ok_dis]
+        liked_ids = [imdb for _raw, imdb, _ in ok_like]
+        disliked_ids = [imdb for _raw, imdb, _ in ok_dis]
 
-    if not liked_ids and not disliked_ids:
-        st.error("Need at least one resolvable like or dislike.")
-        st.stop()
+        if not liked_ids and not disliked_ids:
+            st.error("Need at least one resolvable like or dislike.")
 
-    if miss_like or miss_dis:
-        st.info("Unresolved titles: " + ", ".join(miss_like + miss_dis))
+        if miss_like or miss_dis:
+            st.info("Unresolved titles: " + ", ".join(miss_like + miss_dis))
 
-    with st.spinner("Querying Pinecone & computing recommendations …"):
-        recs = recommend(
-            liked_ids=liked_ids,
-            disliked_ids=disliked_ids,
-            top_k=top_k,
-            min_year=min_year or None,
-            min_rating=min_imdb or None,
-            min_norm=min_norm or None,
-            min_votes=min_votes or None,
-            include_genres=ic_gen or None,
-            exclude_genres=ex_gen or None,
-            include_countries=ic_cty or None,
-            exclude_countries=ex_cty or None,
-            include_languages=ic_lang or None,
-            exclude_languages=ex_lang or None,
-        )
+        with st.spinner("Querying Pinecone & computing recommendations …"):
+            recs = recommend(
+                liked_ids=liked_ids,
+                disliked_ids=disliked_ids,
+                top_k=top_k,
+                min_year=min_year or None,
+                min_rating=min_imdb or None,
+                min_norm=min_norm or None,
+                min_votes=min_votes or None,
+                include_genres=ic_gen or None,
+                exclude_genres=ex_gen or None,
+                include_countries=ic_cty or None,
+                exclude_countries=ex_cty or None,
+                include_languages=ic_lang or None,
+                exclude_languages=ex_lang or None,
+            )
 
     st.subheader(f"Top {len(recs)} recommendations")
 

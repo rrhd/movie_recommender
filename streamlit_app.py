@@ -13,7 +13,6 @@ streamlit_app.py  –  front-end for the Pinecone movie recommender.
 from __future__ import annotations
 
 import logging
-import pickle
 from pathlib import Path
 from typing import Dict, Tuple
 

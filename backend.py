@@ -23,7 +23,7 @@ from cachetools import LRUCache, cached
 from pinecone import PineconeException, PineconeAsyncio
 
 from pinecone_client import INDEX, DIM, PINECONE_API_KEY, PINECONE_INDEX_NAME
-
+SCRIPT_DIR_BE = Path(__file__).parent
 # ───────────────────────────────────────────────────────────────────────────────
 # constants / knobs
 # ───────────────────────────────────────────────────────────────────────────────
@@ -35,13 +35,16 @@ WORKERS = min(32, (os.cpu_count() or 8) * 2)
 
 ARTIFACTS = Path(__file__).parent / "artifacts"
 METADATA_PKL = ARTIFACTS / "enriched_movies.pkl"
-TOK_PATH = ARTIFACTS / "tokens.pkl"
+TOK_PATH_RT = SCRIPT_DIR_BE / "app_tokens.pkl"
 try:
-    TOKENS: Dict[str, set[str]] = pickle.load(open(TOK_PATH, "rb"))
+    TOKENS: Dict[str, set[str]] = pickle.load(open(TOK_PATH_RT, "rb"))
+    logging.info(f"Successfully loaded tokens from {TOK_PATH_RT.name}")
 except FileNotFoundError:
-    logging.warning("tokens.pkl missing – falling back to on-the-fly tokenisation")
+    logging.warning(f"{TOK_PATH_RT.name} missing – MMR diversity will use on-the-fly tokenisation or be affected.")
     TOKENS = {}
-
+except Exception as e:
+    logging.error(f"Error loading {TOK_PATH_RT.name}: {e}. Falling back to empty tokens.")
+    TOKENS = {}
 # ───────────────────────────────────────────────────────────────────────────────
 # logging
 # ───────────────────────────────────────────────────────────────────────────────

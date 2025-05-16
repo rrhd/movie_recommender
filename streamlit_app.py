@@ -245,9 +245,9 @@ btn_recommend = b_rec.button("✨ Recommend")
 if btn_preview:
     likes_raw = [t.strip() for t in likes_txt.splitlines() if t.strip()]
     dislikes_raw = [t.strip() for t in dislikes_txt.splitlines() if t.strip()]
-
-    ok_like, miss_like = resolve_lines(likes_raw)
-    ok_dis, miss_dis = resolve_lines(dislikes_raw)
+    with st.spinner("🔍 Matching your titles..."):
+        ok_like, miss_like = resolve_lines(likes_raw)
+        ok_dis, miss_dis = resolve_lines(dislikes_raw)
 
     if ok_like:
         st.subheader("👍 We’ll search as Likes")
@@ -284,9 +284,9 @@ if btn_preview:
 if btn_recommend:
     likes_raw = [t.strip() for t in likes_txt.splitlines() if t.strip()]
     dislikes_raw = [t.strip() for t in dislikes_txt.splitlines() if t.strip()]
-
-    ok_like, miss_like = resolve_lines(likes_raw)
-    ok_dis, miss_dis = resolve_lines(dislikes_raw)
+    with st.spinner("✨ Resolving titles and preparing recommendations..."):
+        ok_like, miss_like = resolve_lines(likes_raw)
+        ok_dis, miss_dis = resolve_lines(dislikes_raw)
 
     liked_ids = [imdb for _raw, imdb, _ in ok_like]
     disliked_ids = [imdb for _raw, imdb, _ in ok_dis]

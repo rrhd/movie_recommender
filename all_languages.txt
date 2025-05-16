@@ -1,0 +1,242 @@
+Abkhazian
+Aboriginal
+Acholi
+Afrikaans
+Akan
+Albanian
+Algonquin
+American Sign Language
+Amharic
+Apache languages
+Arabic
+Aramaic
+Armenian
+Assamese
+Assyrian Neo-Aramaic
+Awadhi
+Aymara
+Azerbaijani
+Bable
+Balinese
+Bambara
+Bangla
+Basque
+Belarusian
+Berber languages
+Bhojpuri
+Bosnian
+Brazilian Sign Language
+British Sign Language
+Bulgarian
+Burmese
+Cantonese
+Catalan
+Chechen
+Cherokee
+Cheyenne
+Chhattisgarhi
+Chinese
+Cornish
+Corsican
+Cree
+Croatian
+Crow
+Czech
+Danish
+Dari
+Dinka
+Divehi
+Dutch
+Dzongkha
+Eastern Frisian
+Egyptian (Ancient)
+English
+Esperanto
+Estonian
+Faroese
+Filipino
+Finnish
+Flemish
+French
+French Sign Language
+Galician
+Georgian
+German
+Greek
+Greek, Ancient (to 1453)
+Guarani
+Gujarati
+Gumatj
+Haitian Creole
+Hakka
+Haryanvi
+Hausa
+Hawaiian
+Hebrew
+Hiligaynon
+Hindi
+Hmong
+Hokkien
+Hungarian
+Ibibio
+Ibo
+Icelandic
+Indian Sign Language
+Indonesian
+Inuktitut
+Irish
+Irula
+Italian
+Japanese
+Japanese Sign Language
+Kaado
+Kalaallisut
+Kannada
+Karen
+Kashmiri
+Kazakh
+Khasi
+Khmer
+Kikuyu
+Kinyarwanda
+Kirundi
+Klingon
+Konkani
+Korean
+Korean Sign Language
+Kuna
+Kurdish
+Kyrgyz
+Ladakhi
+Lao
+Latin
+Latvian
+Lingala
+Lithuanian
+Low German
+Luxembourgish
+Macedonian
+Maithili
+Malagasy
+Malay
+Malayalam
+Malinka
+Maltese
+Mandarin
+Mandingo
+Manipuri
+Maori
+Mapudungun
+Marathi
+Marshallese
+Masai
+Maya
+Mende
+Micmac
+Middle English
+Min Nan
+Minangkabau
+Mohawk
+Mongolian
+Montagnais
+More
+Nahuatl
+Navajo
+Neapolitan
+Nepali
+None
+Norse, Old
+North American Indian
+Norwegian
+Nushi
+Nyaneka
+Occitan
+Odia
+Old English
+Oromo
+Pashto
+Pawnee
+Persian
+Peul
+Polish
+Polynesian
+Portuguese
+Pular
+Punjabi
+Purepecha
+Quechua
+Quenya
+Rajasthani
+Romanian
+Romansh
+Romany
+Rotuman
+Russian
+Russian Sign Language
+Saami
+Samoan
+Sanskrit
+Santali
+Sardinian
+Scanian
+Scots
+Scottish Gaelic
+Serbian
+Serbo-Croatian
+Shanghainese
+Shona
+Shoshoni
+Sicilian
+Sign Languages
+Sindarin
+Sindhi
+Sinhala
+Sioux
+Slovak
+Slovenian
+Somali
+Soninke
+Southern Sotho
+Spanish
+Spanish Sign Language
+Sranan
+Swahili
+Swedish
+Swiss German
+Sylheti
+Syriac
+Tagalog
+Tajik
+Tamashek
+Tamil
+Tarahumara
+Tatar
+Telugu
+Teochew
+Thai
+Tibetan
+Tlingit
+Tongan
+Tsonga
+Tswana
+Tulu
+Tupi
+Turkish
+Turkmen
+Tuvinian
+Tzotzil
+Ukrainian
+Urdu
+Uzbek
+Vietnamese
+Visayan
+Washoe
+Wayuu
+Welsh
+Western Frisian
+Wolof
+Xhosa
+Yakut
+Yiddish
+Yoruba
+Zulu

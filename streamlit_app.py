@@ -177,12 +177,12 @@ ALL_GENRES = sorted({g for lst in DF_META.get("genres", pd.Series([[]]*(len(DF_M
 ALL_COUNTRIES = sorted({c for lst in DF_META.get("countries", pd.Series([[]]*(len(DF_META) if not DF_META.empty else 0))) for c in lst if isinstance(c, str)})
 ALL_LANGUAGES = sorted({l for lst in DF_META.get("languages", pd.Series([[]]*(len(DF_META) if not DF_META.empty else 0))) for l in lst if isinstance(l, str)})
 # save all genres, countries, languages to a file
-with open(ART_DIR / "all_genres.txt", "w") as f:
-    f.write("\n".join(ALL_GENRES))
-with open(ART_DIR / "all_countries.txt", "w") as f:
-    f.write("\n".join(ALL_COUNTRIES))
-with open(ART_DIR / "all_languages.txt", "w") as f:
-    f.write("\n".join(ALL_LANGUAGES))
+with open(script_dir / "all_genres.txt", "w") as f:
+    for g in ALL_GENRES: f.write(f"{g}\n")
+with open(script_dir / "all_countries.txt", "w") as f:
+    for c in ALL_COUNTRIES: f.write(f"{c}\n")
+with open(script_dir / "all_languages.txt", "w") as f:
+    for l in ALL_LANGUAGES: f.write(f"{l}\n")
 
 # ───────── sidebar – filters ─────────────────────────────────────────────
 with st.sidebar:

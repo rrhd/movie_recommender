@@ -27,7 +27,6 @@ def _load_secrets() -> dict:
 _secrets = _load_secrets()
 PINECONE_API_KEY = _secrets["PINECONE_API_KEY"]
 PINECONE_INDEX_NAME = _secrets["PINECONE_INDEX_NAME"]
-PINECONE_HOST = _secrets["PINECONE_HOST"]
 
 pc = Pinecone(api_key=PINECONE_API_KEY)
 desc = pc.describe_index(PINECONE_INDEX_NAME)
@@ -35,4 +34,4 @@ DIM = desc.dimension
 
 
 INDEX = pc.Index(PINECONE_INDEX_NAME)
-__all__ = ["INDEX", "DIM", "PINECONE_HOST", "PINECONE_API_KEY", "PINECONE_INDEX_NAME"]
+__all__ = ["INDEX", "DIM", "PINECONE_API_KEY", "PINECONE_INDEX_NAME"]

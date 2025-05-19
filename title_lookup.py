@@ -23,7 +23,6 @@ import scipy.sparse as sp
 from rapidfuzz import fuzz
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-
 SCRIPT_DIR_TL = Path(__file__).parent
 
 
@@ -190,6 +189,8 @@ def fuzzy_match_one(
     _ensure_loaded()
     raw = q.strip()
     ql = raw.lower().strip()
+    ql = ql.replace("&", " and ").replace("’", "'").replace("-", " ")
+    ql = re.sub(r'\s+', ' ', ql).strip()
     if not ql:
         return None, None, 0.0
 
@@ -197,20 +198,18 @@ def fuzzy_match_one(
     m = re.search(r"\b(19|20)\d{2}\b", ql)
     if m:
         year = int(m.group())
-        ql = ql[: m.start()] + ql[m.end() :]
+        ql = ql[: m.start()] + ql[m.end():]
         ql = ql.strip().strip("():-")
 
     bare = _strip_articles(ql)
 
     exact = [i for i, t in enumerate(_ID2LC.values()) if _strip_articles(t) == bare]
-    if exact and year is not None:
-        exact_year = [i for i in exact if _YEAR_MAP.get(_IDS[i]) == year]
-        if exact_year:
-            exact = exact_year
     if exact:
-        i = exact[0]
-
-        return _IDS[i], _ORIG_MAP.get(_IDS[i], _ID2LC[_IDS[i]].title()), 1.0
+        if year is not None:
+            exact = [i for i in exact if _YEAR_MAP.get(_IDS[i]) == year]
+        if exact:
+            i = exact[0]
+            return _IDS[i], _ORIG_MAP.get(_IDS[i], _ID2LC[_IDS[i]].title()), 1.0
 
     if len(bare) > 7:
         pattern = re.compile(rf"^{re.escape(bare)}\b")
@@ -221,44 +220,56 @@ def fuzzy_match_one(
         ]
         if pref:
             scores = {
-                i: fuzz.WRatio(bare, _strip_articles(_ID2LC[_IDS[i]])) for i in pref
+                i: fuzz.WRatio(bare, _strip_articles(_ID2LC[_IDS[i]])) / 100.0
+                for i in pref
             }
             best = max(scores, key=scores.get)
-
-            return (
-                _IDS[best],
-                _ORIG_MAP.get(_IDS[best], _ID2LC[_IDS[best]].title()),
-                scores[best] / 100.0,
-            )
+            if scores[best] >= threshold:
+                matched_id = _IDS[best]
+                if year is None or _YEAR_MAP.get(matched_id) == year:
+                    return (
+                        matched_id,
+                        _ORIG_MAP.get(matched_id, _ID2LC[matched_id].title()),
+                        scores[best],
+                    )
 
     pref = [
         i
         for i, t in enumerate(_ID2LC.values())
         if _strip_articles(t).startswith(bare + " ")
     ]
-    if pref and year is not None:
-        pref_year = [i for i in pref if _YEAR_MAP.get(_IDS[i]) == year]
-        if pref_year:
-            pref = pref_year
     if pref:
-        i = min(pref, key=lambda i: len(_ID2LC[_IDS[i]]))
-        return _IDS[i], _ORIG_MAP.get(_IDS[i], _ID2LC[_IDS[i]].title()), 0.9
+        if year is not None:
+            pref = [i for i in pref if _YEAR_MAP.get(_IDS[i]) == year]
+        if pref:
+            i = min(pref, key=lambda i: len(_ID2LC[_IDS[i]]))
+            score = 0.9
+            if score >= threshold:
+                matched_id = _IDS[i]
+                return (
+                    matched_id,
+                    _ORIG_MAP.get(matched_id, _ID2LC[matched_id].title()),
+                    score,
+                )
 
     if _VEC is None or _X is None:
-        logger.warning(
-            "TF-IDF vectorizer or matrix not loaded, TF-IDF fallback unavailable."
-        )
+        logger.warning("TF-IDF vectorizer or matrix not loaded.")
         return None, None, 0.0
 
     qv = _VEC.transform([ql])
     sims = (_X @ qv.T).toarray().ravel()
     idxs = np.where(sims >= threshold)[0]
-    if idxs.size == 0:
+    if not idxs.size:
         return None, None, 0.0
 
     i = idxs[np.argmax(sims[idxs])]
-    return _IDS[i], _ORIG_MAP.get(_IDS[i], _ID2LC[_IDS[i]].title()), float(sims[i])
+    matched_id = _IDS[i]
+    matched_year = _YEAR_MAP.get(matched_id)
+    # enforce year match
+    if year is not None and matched_year != year:
+        return None, None, 0.0
 
+    return matched_id, _ORIG_MAP.get(matched_id, _ID2LC[matched_id].title()), float(sims[i])
 
 def match_many(queries: Iterable[str]) -> Tuple[List[Tuple[str, str]], List[str]]:
     ok, miss = [], []

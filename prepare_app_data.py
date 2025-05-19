@@ -26,30 +26,6 @@ META_PKL_SOURCE = ARTIFACTS_DIR / "enriched_movies.pkl"
 
 
 APP_DATA_OUTPUT_PKL = SCRIPT_DIR / "app_data.pkl"
-APP_TOKENS_OUTPUT_PKL = SCRIPT_DIR / "app_tokens.pkl"
-
-
-def _generate_tokens(record: dict) -> set[str]:
-    """Generates genre and decade tokens for a movie record."""
-    tokens = set()
-
-    genres = record.get("genres")
-    if isinstance(genres, list):
-        tokens.update(str(g).lower() for g in genres if pd.notna(g) and str(g).strip())
-    elif pd.notna(genres) and isinstance(genres, str) and genres.strip():
-        tokens.add(genres.lower())
-
-    year = record.get("year")
-    try:
-        if pd.notna(year):
-            year_str = str(int(float(year)))
-            if len(year_str) >= 3:
-                tokens.add(year_str[:3] + "0s")
-    except ValueError:
-        logger.warning(
-            f"Could not parse year '{year}' for decade token for imdb_id {record.get('imdb_id')}"
-        )
-    return tokens
 
 
 def main():
@@ -137,20 +113,6 @@ def main():
         logger.error(f"Failed to save app data to {APP_DATA_OUTPUT_PKL}: {e}")
         return
 
-    logger.info("Generating tokens...")
-
-    try:
-        tok_map = {
-            str(record["imdb_id"]): _generate_tokens(record)
-            for record in df_app.to_dict("records")
-        }
-        with open(APP_TOKENS_OUTPUT_PKL, "wb") as f:
-            pickle.dump(tok_map, f)
-        logger.info(
-            f"Successfully saved {len(tok_map)} token sets to {APP_TOKENS_OUTPUT_PKL}"
-        )
-    except Exception as e:
-        logger.error(f"Failed to generate or save tokens: {e}")
 
     logger.info("Data preparation complete.")
 

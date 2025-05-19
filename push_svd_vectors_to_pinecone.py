@@ -8,9 +8,24 @@ The script …
 
 1. reads secrets from .streamlit/secrets.toml
 2. verifies / creates the index (dimension + metric must match)
-3. streams vectors in batches of `BATCH_SZ`
-4. attaches the metadata fields the UI / service expect so that
+3. fetches existing IDs in batches to avoid re-uploading (uses Pinecone's fetch method [A])
+4. streams NEW vectors in batches of `BATCH_SZ` (uses Pinecone's upsert method [B])
+5. attaches the metadata fields the UI / service expect so that
    later filters can be executed directly inside Pinecone.
+
+Citations (based on Pinecone documentation and client behavior):
+[A] Pinecone `Index.fetch()` method: This operation retrieves records by their ID from an index.
+    It is used here to check which of the candidate IDs already exist in the Pinecone index.
+    If an ID provided in the `ids` list to `fetch()` is not found in the index, it will be
+    absent from the `vectors` dictionary in the response.
+    Reference: Official Pinecone Documentation (e.g., "Fetch records", "Fetch data"). [3, 4]
+
+[B] Pinecone `Index.upsert()` method: This operation writes vectors into a namespace.
+    If a new value (vector and/or metadata) is upserted for an existing vector ID,
+    it will overwrite the previous value. If the ID does not exist, it creates a new vector.
+    In this script, we use it specifically for IDs determined to be new after the `fetch` check
+    to minimize write operations.
+    Reference: Official Pinecone Documentation (e.g., "Upsert vectors", "Upsert data"). [1, 2, 7]
 """
 
 from __future__ import annotations
@@ -21,7 +36,7 @@ import pickle
 import sqlite3
 import toml
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, List, Dict, Tuple
 
 import numpy as np
 import pandas as pd
@@ -37,7 +52,7 @@ META_PATH = ARTIFACTS_DIR / "enriched_movies.pkl"
 ZSCORE_DB_PATH = ARTIFACTS_DIR / "movie_database.db"
 
 SECRETS_FILE = Path(__file__).parent / ".streamlit" / "secrets.toml"
-BATCH_SZ = 100
+BATCH_SZ = 100 # Keep batch size reasonable for both fetch and upsert
 SPEC = ServerlessSpec(cloud="aws", region="us-east-1")
 METRIC = "cosine"
 
@@ -60,13 +75,17 @@ def ensure_index(pc: Pinecone, name: str, dim: int) -> None:
         pc.create_index(name=name, dimension=dim, metric=METRIC, spec=SPEC)
 
         for waited in range(0, 125, 5):
-            if pc.describe_index(name).status["ready"]:
-                print("[SETUP] index ready.")
-                break
-            print(f"  … waiting {waited}s")
+            try:
+                status = pc.describe_index(name).status
+                if status and status.get("ready", False):
+                    print("[SETUP] index ready.")
+                    break
+            except PineconeException as e:
+                print(f"  … waiting for index, error describing: {e}")
+            print(f"  … waiting {waited+5}s for index to be ready")
             time.sleep(5)
         else:
-            sys.exit("[ERR] index creation timeout.")
+            sys.exit("[ERR] index creation timeout or error checking status.")
     else:
         desc = pc.describe_index(name)
         if desc.dimension != dim or desc.metric.lower() != METRIC.lower():
@@ -85,7 +104,6 @@ def chunked(rng: range, size: int) -> Iterable[range]:
 
 
 def scale_z(z: float | int | None) -> float | None:
-    """Convert z-score to 0-10 scale (Φ(z) · 10)."""
     if z is None:
         return None
     return round(float(st.norm.cdf(float(z))) * 10, 2)
@@ -110,13 +128,6 @@ def safe_float(v):
 
 
 def safe_list(v):
-    """
-    Convert to a list; tolerate None / NaN / strings, etc.
-    - None or NaN  -> []
-    - list         -> list
-    - "A,B"        -> ["A", "B"]
-    - everything else -> []
-    """
     if v is None or (isinstance(v, float) and pd.isna(v)):
         return []
     if isinstance(v, list):
@@ -209,15 +220,19 @@ def main() -> None:
     ensure_index(pc, index_name, dim)
     index = pc.Index(index_name)
 
-    total = vecs.shape[0]
-    print(f"[UPSERT] {total} vectors ({dim}-d) → index '{index_name}'")
-    uploaded = 0
+    total_items_to_process = vecs.shape[0]
+    print(f"[UPSERT CHECK] {total_items_to_process} total local items ({dim}-d) for index '{index_name}'")
 
-    for rng in chunked(range(total), BATCH_SZ):
-        payload = []
+    actually_uploaded_count = 0
+    processed_count = 0
+
+    for rng in chunked(range(total_items_to_process), BATCH_SZ):
+        batch_ids_to_check: List[str] = []
+        potential_payload_map: Dict[str, Tuple[str, List[float], Dict[str, Any]]] = {}
+
         for i in rng:
-            imdb_id = id_map[i]
-            vec = vecs[i].tolist()
+            imdb_id = str(id_map[i])
+            vec_values = vecs[i].tolist()
             m_raw = meta.get(imdb_id, {})
 
             m = {
@@ -233,18 +248,45 @@ def main() -> None:
 
             m = {k: v for k, v in m.items() if v not in (None, [], "", {})}
 
-            payload.append((imdb_id, vec, m))
+            batch_ids_to_check.append(imdb_id)
+            potential_payload_map[imdb_id] = (imdb_id, vec_values, m)
 
-        try:
-            index.upsert(payload)
-        except PineconeException as e:
-            sys.exit(f"\n[ERR] upsert failed: {e}")
+        existing_ids_in_pinecone = set()
+        if batch_ids_to_check:
+            try:
+                fetch_response = index.fetch(ids=batch_ids_to_check)
+                if fetch_response and fetch_response.vectors:
+                    existing_ids_in_pinecone.update(fetch_response.vectors.keys())
+            except PineconeException as e:
+                print(f"\n[WARN] Fetching IDs failed for a batch: {e}. Will attempt to upsert all in this batch as a fallback.")
+                existing_ids_in_pinecone.clear()
+            except Exception as e:
+                print(f"\n[WARN] Non-Pinecone error during fetch: {e}. Will attempt to upsert all in this batch.")
+                existing_ids_in_pinecone.clear()
 
-        uploaded += len(payload)
-        print(f"  … {uploaded}/{total}", end="\r", flush=True)
+        payload_to_upsert = []
+        for imdb_id_to_eval in batch_ids_to_check: # Renamed for clarity
+            if imdb_id_to_eval not in existing_ids_in_pinecone:
+                payload_to_upsert.append(potential_payload_map[imdb_id_to_eval])
 
-    print(f"\n[DONE] all vectors uploaded ✔ ({total})")
+        if payload_to_upsert:
+            try:
+                # Pinecone: Upsert only new vectors.
+                # See Pinecone documentation for Index.upsert() [B]. [1, 2, 7]
+                index.upsert(payload_to_upsert)
+                actually_uploaded_count += len(payload_to_upsert)
+            except PineconeException as e:
+                print(f"\n[ERR] upsert failed for a batch of {len(payload_to_upsert)} items: {e}")
+                print(f"Problematic batch IDs (first 5): {[item[0] for item in payload_to_upsert[:5]]}")
+                sys.exit(f"\n[ERR] Critical upsert failure after filtering. Exiting.")
+            except Exception as e:
+                print(f"\n[ERR] Non-Pinecone error during upsert: {e}")
+                sys.exit(f"\n[ERR] Critical non-Pinecone upsert failure. Exiting.")
 
+        processed_count += len(batch_ids_to_check)
+        print(f"  … processed: {processed_count}/{total_items_to_process}, new items uploaded: {actually_uploaded_count}", end="\r", flush=True)
+
+    print(f"\n[DONE] All {total_items_to_process} local items processed. {actually_uploaded_count} new items uploaded. ✔")
 
 if __name__ == "__main__":
     main()

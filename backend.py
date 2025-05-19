@@ -31,17 +31,23 @@ RAW_K = 100
 ALPHA = 1.0
 BETA = 0.8
 MMR_LAMBDA = 0.70
-MMR_EMBEDDING_DIVERSITY_WEIGHT = 0.5  # 0 for pure token, 1 for pure embedding, 0.5 for equal mix
+MMR_EMBEDDING_DIVERSITY_WEIGHT = (
+    0.5  # 0 for pure token, 1 for pure embedding, 0.5 for equal mix
+)
 WORKERS = min(32, (os.cpu_count() or 8) * 2)
 
 # For Centroid Scoring
-GAMMA_CENTROID_LIKE = 0.15      # Weight for similarity to liked items' centroid
-DELTA_CENTROID_DISLIKE = 0.10   # Weight for *dissimilarity* from disliked items' centroid
+GAMMA_CENTROID_LIKE = 0.15  # Weight for similarity to liked items' centroid
+DELTA_CENTROID_DISLIKE = (
+    0.10  # Weight for *dissimilarity* from disliked items' centroid
+)
 
 # For Pseudo Label Spreading/Propagation
-PROPAGATION_ITERATIONS = 2      # Number of propagation iterations (0 to disable)
-PROPAGATION_K_NEIGHBORS = 7    # Max neighbors for each candidate during propagation
-PROPAGATION_ALPHA_MIX = 0.20    # Mixing factor for propagated score vs. original score in an iteration
+PROPAGATION_ITERATIONS = 2  # Number of propagation iterations (0 to disable)
+PROPAGATION_K_NEIGHBORS = 7  # Max neighbors for each candidate during propagation
+PROPAGATION_ALPHA_MIX = (
+    0.20  # Mixing factor for propagated score vs. original score in an iteration
+)
 PROPAGATION_HOP2_DAMPING = 0.6  # Damping factor for 2-hop influence
 
 ARTIFACTS = Path(__file__).parent / "artifacts"
@@ -96,12 +102,16 @@ def _vectorized_cosine_similarity_square(matrix: np.ndarray) -> np.ndarray:
     return np.clip(similarity_matrix, -1.0, 1.0)  # Clip for numerical stability
 
 
-def _vectorized_cosine_similarity_pairwise(matrix1: np.ndarray, matrix2: np.ndarray) -> np.ndarray:
+def _vectorized_cosine_similarity_pairwise(
+    matrix1: np.ndarray, matrix2: np.ndarray
+) -> np.ndarray:
     """Computes cosine similarity between all rows of matrix1 and all rows of matrix2."""
     # Input: matrix1 (M, D), matrix2 (N, D)
     # Output: similarity_matrix (M, N)
-    if matrix1.ndim == 1: matrix1 = matrix1.reshape(1, -1)
-    if matrix2.ndim == 1: matrix2 = matrix2.reshape(1, -1)
+    if matrix1.ndim == 1:
+        matrix1 = matrix1.reshape(1, -1)
+    if matrix2.ndim == 1:
+        matrix2 = matrix2.reshape(1, -1)
 
     if matrix1.shape[0] == 0 or matrix2.shape[0] == 0:
         return np.array([]).reshape(matrix1.shape[0], matrix2.shape[0])
@@ -110,6 +120,7 @@ def _vectorized_cosine_similarity_pairwise(matrix1: np.ndarray, matrix2: np.ndar
     normalized_matrix2 = _robust_normalize_rows(matrix2)
     similarity_matrix = np.dot(normalized_matrix1, normalized_matrix2.T)
     return np.clip(similarity_matrix, -1.0, 1.0)
+
 
 def _fix_lists(rec: dict) -> dict:
     for key in ("genres", "countries", "languages"):
@@ -120,16 +131,23 @@ def _fix_lists(rec: dict) -> dict:
 
 
 def _pseudo_label_propagation(
-        current_scores: Dict[str, float],
-        candidate_vectors: Dict[str, np.ndarray],
-        iterations: int,
-        k_neighbors: int,
-        alpha_mix: float,
-        hop2_damping: float,
-        logger: logging.Logger,
+    current_scores: Dict[str, float],
+    candidate_vectors: Dict[str, np.ndarray],
+    iterations: int,
+    k_neighbors: int,
+    alpha_mix: float,
+    hop2_damping: float,
+    logger: logging.Logger,
 ) -> Dict[str, float]:
-    if not candidate_vectors or not current_scores or iterations == 0 or k_neighbors == 0:
-        logger.info("Skipping pseudo-label propagation (no iterations, neighbors, data, or scores).")
+    if (
+        not candidate_vectors
+        or not current_scores
+        or iterations == 0
+        or k_neighbors == 0
+    ):
+        logger.info(
+            "Skipping pseudo-label propagation (no iterations, neighbors, data, or scores)."
+        )
         return current_scores
 
     logger.info(
@@ -141,7 +159,9 @@ def _pseudo_label_propagation(
 
     # Filter for IDs that have both scores and vectors
     valid_ids_for_propagation = [
-        cid for cid in current_scores.keys() if cid in candidate_vectors and candidate_vectors[cid] is not None
+        cid
+        for cid in current_scores.keys()
+        if cid in candidate_vectors and candidate_vectors[cid] is not None
     ]
 
     if len(valid_ids_for_propagation) < 2:
@@ -153,18 +173,27 @@ def _pseudo_label_propagation(
     ordered_cids_prop = valid_ids_for_propagation
     # Stack vectors into a matrix
     try:
-        prop_vectors_matrix = np.stack([candidate_vectors[cid] for cid in ordered_cids_prop])
-    except ValueError as e: # Handles cases with inconsistent vector dimensions or empty list
-        logger.error(f"Error stacking vectors for propagation: {e}. Skipping propagation.")
+        prop_vectors_matrix = np.stack(
+            [candidate_vectors[cid] for cid in ordered_cids_prop]
+        )
+    except (
+        ValueError
+    ) as e:  # Handles cases with inconsistent vector dimensions or empty list
+        logger.error(
+            f"Error stacking vectors for propagation: {e}. Skipping propagation."
+        )
         return propagated_scores
 
-
     local_neighborhoods: dict[str, list[tuple[str, float]]] = defaultdict(list)
-    logger.info(f"Building local neighborhoods for {len(ordered_cids_prop)} candidates...")
+    logger.info(
+        f"Building local neighborhoods for {len(ordered_cids_prop)} candidates..."
+    )
 
-    if prop_vectors_matrix.size > 0 : # Ensure matrix is not empty
+    if prop_vectors_matrix.size > 0:  # Ensure matrix is not empty
         # Calculate all-pairs cosine similarity in a vectorized way
-        similarity_matrix = _vectorized_cosine_similarity_square(prop_vectors_matrix) # Uses new helper
+        similarity_matrix = _vectorized_cosine_similarity_square(
+            prop_vectors_matrix
+        )  # Uses new helper
 
         for i, cid1 in enumerate(ordered_cids_prop):
             # Similarities of cid1 to all other candidates
@@ -173,21 +202,22 @@ def _pseudo_label_propagation(
             # Exclude self-similarity (can be done by setting similarity_matrix[i, i] = -1 before processing)
             # Or, more robustly during neighbor selection:
 
-            neighbor_indices_sorted = np.argsort(sims_to_others)[::-1] # Sort descending
+            neighbor_indices_sorted = np.argsort(sims_to_others)[
+                ::-1
+            ]  # Sort descending
 
             neighbor_sims_tuples = []
             for j_idx in neighbor_indices_sorted:
-                if i == j_idx: # Skip self
+                if i == j_idx:  # Skip self
                     continue
                 sim_val = sims_to_others[j_idx]
-                if sim_val > 0.05: # Apply threshold
+                if sim_val > 0.05:  # Apply threshold
                     neighbor_sims_tuples.append((ordered_cids_prop[j_idx], sim_val))
-                if len(neighbor_sims_tuples) >= k_neighbors: # Found enough neighbors
+                if len(neighbor_sims_tuples) >= k_neighbors:  # Found enough neighbors
                     break
             local_neighborhoods[cid1] = neighbor_sims_tuples
     else:
         logger.info("No valid vectors to build neighborhoods for propagation.")
-
 
     logger.info("Local neighborhoods built. Starting propagation iterations...")
     # Propagation loop (remains structurally similar as it iterates over sparse neighborhoods)
@@ -195,7 +225,7 @@ def _pseudo_label_propagation(
     for iteration in range(iterations):
         scores_at_iter_start = propagated_scores.copy()
         updates_count = 0
-        for cid in ordered_cids_prop: # Iterate using the ordered list
+        for cid in ordered_cids_prop:  # Iterate using the ordered list
             original_score_cid = scores_at_iter_start.get(cid, 0.0)
 
             influence_1hop = 0.0
@@ -231,20 +261,27 @@ def _pseudo_label_propagation(
 
             if total_weight_sum > 1e-9:
                 propagated_value = total_influence / total_weight_sum
-                new_score = (1 - alpha_mix) * original_score_cid + \
-                                         alpha_mix * propagated_value
-                if new_score != propagated_scores[cid]: # Update only if changed
+                new_score = (
+                    1 - alpha_mix
+                ) * original_score_cid + alpha_mix * propagated_value
+                if new_score != propagated_scores[cid]:  # Update only if changed
                     propagated_scores[cid] = new_score
-                    updates_count +=1
+                    updates_count += 1
         logger.debug(
-            f"Propagation iteration {iteration + 1}/{iterations} completed. Scores updated for {updates_count} candidates.")
-        if updates_count == 0 and iteration > 0: # Optimization: early stop if no scores change
-            logger.info(f"Stopping propagation early at iteration {iteration + 1} as no scores changed.")
+            f"Propagation iteration {iteration + 1}/{iterations} completed. Scores updated for {updates_count} candidates."
+        )
+        if (
+            updates_count == 0 and iteration > 0
+        ):  # Optimization: early stop if no scores change
+            logger.info(
+                f"Stopping propagation early at iteration {iteration + 1} as no scores changed."
+            )
             break
-
 
     logger.info("Pseudo-label propagation finished.")
     return propagated_scores
+
+
 _VEC_CACHE: LRUCache[str, np.ndarray] = LRUCache(maxsize=250_000)
 
 
@@ -390,13 +427,12 @@ def recommend(liked_ids: List[str], disliked_ids: List[str], **filters):
         return []
     filt_key = tuple(sorted((k, _freeze(v)) for k, v in filters.items()))
     recs = _cached_recommend(
-            tuple(sorted(liked_ids)), tuple(sorted(disliked_ids)), filt_key)
+        tuple(sorted(liked_ids)), tuple(sorted(disliked_ids)), filt_key
+    )
     # exclude any that the user already likes
     liked_set = set(liked_ids)
     recs = [
-            r
-     for r in recs
-     if r["url"].split("/title/")[-1].split("/")[0] not in liked_set
+        r for r in recs if r["url"].split("/title/")[-1].split("/")[0] not in liked_set
     ]
     return recs
 
@@ -406,7 +442,7 @@ def _recommend_inner(
     disliked_ids: List[str],
     *,
     top_k: int = 15,
-    min_year: int = None, # Add other filters here as in original
+    min_year: int = None,  # Add other filters here as in original
     min_rating: float = None,
     min_norm: float = None,
     min_votes: int = None,
@@ -417,7 +453,9 @@ def _recommend_inner(
     include_languages: List[str] = None,
     exclude_languages: List[str] = None,
 ) -> List[Dict[str, Any]]:
-    log.info(f"Recommendation request: {len(liked_ids)} likes, {len(disliked_ids)} dislikes, filters: {{...}}")
+    log.info(
+        f"Recommendation request: {len(liked_ids)} likes, {len(disliked_ids)} dislikes, filters: {{...}}"
+    )
 
     n_like, n_dis = len(liked_ids), len(disliked_ids)
     alpha = ALPHA / max(1.0, np.log1p(n_like))
@@ -427,12 +465,14 @@ def _recommend_inner(
     cand_meta, cand_vec, sim_likes = _recall_parallel(liked_ids, disliked_ids)
 
     if disliked_ids:
-        for d_id in disliked_ids: _fetch_vec_cached(d_id) # Prime cache
+        for d_id in disliked_ids:
+            _fetch_vec_cached(d_id)  # Prime cache
 
     cand_ids_from_recall = set(cand_vec.keys())
     # Filter out candidates that are liked or disliked, or have no vector
     cand_ids_set = {
-        cid for cid in (cand_ids_from_recall - set(liked_ids) - set(disliked_ids))
+        cid
+        for cid in (cand_ids_from_recall - set(liked_ids) - set(disliked_ids))
         if cand_vec.get(cid) is not None
     }
 
@@ -447,113 +487,174 @@ def _recommend_inner(
     # Stack candidate vectors into a matrix
     try:
         cand_matrix = np.stack([cand_vec[cid] for cid in ordered_cand_ids])
-    except (ValueError, KeyError) as e: # Catch issues if a cid in ordered_cand_ids is somehow not in cand_vec or vectors are malformed
-        log.error(f"Error stacking candidate vectors: {e}. Aborting scoring for some candidates or all.")
+    except (
+        ValueError,
+        KeyError,
+    ) as e:  # Catch issues if a cid in ordered_cand_ids is somehow not in cand_vec or vectors are malformed
+        log.error(
+            f"Error stacking candidate vectors: {e}. Aborting scoring for some candidates or all."
+        )
         # Filter ordered_cand_ids and rebuild matrix, or return [] if too many errors.
         # For simplicity here, if stacking fails catastrophically, we might return empty.
         # A more robust way would be to filter ordered_cand_ids.
         # Assuming cand_vec[cid] is not None due to earlier check, this is mostly for dimensional consistency.
-        if not ordered_cand_ids: return [] # if the list became empty
+        if not ordered_cand_ids:
+            return []  # if the list became empty
         # Fallback or error:
-        log.info("Proceeding with candidates for whom vector stacking was successful (if partial failure handling implemented).")
+        log.info(
+            "Proceeding with candidates for whom vector stacking was successful (if partial failure handling implemented)."
+        )
         # This example assumes if stack fails, it's critical.
         return []
-
 
     log.info("Starting initial scoring with centroid components...")
     liked_centroid_vec: np.ndarray | None = None
     if liked_ids:
-        liked_item_vecs = [v for i in liked_ids if (v := _fetch_vec_cached(i)) is not None and np.any(v)]
+        liked_item_vecs = [
+            v
+            for i in liked_ids
+            if (v := _fetch_vec_cached(i)) is not None and np.any(v)
+        ]
         if liked_item_vecs:
             liked_centroid_vec = np.mean(np.stack(liked_item_vecs), axis=0)
 
     disliked_centroid_vec: np.ndarray | None = None
     if disliked_ids:
-        disliked_item_vecs = [v for i in disliked_ids if (v := _fetch_vec_cached(i)) is not None and np.any(v)]
+        disliked_item_vecs = [
+            v
+            for i in disliked_ids
+            if (v := _fetch_vec_cached(i)) is not None and np.any(v)
+        ]
         if disliked_item_vecs:
             disliked_centroid_vec = np.mean(np.stack(disliked_item_vecs), axis=0)
 
     # --- Vectorized Scoring Calculations ---
     num_candidates = len(ordered_cand_ids)
-    scores_array = np.zeros(num_candidates) # Initialize scores array
+    scores_array = np.zeros(num_candidates)  # Initialize scores array
 
     # Positive similarities (already computed per candidate)
-    pos_sim_array = np.array([float(np.mean(sim_likes[cid])) if sim_likes.get(cid) else 0.0 for cid in ordered_cand_ids])
+    pos_sim_array = np.array(
+        [
+            float(np.mean(sim_likes[cid])) if sim_likes.get(cid) else 0.0
+            for cid in ordered_cand_ids
+        ]
+    )
     scores_array += alpha * pos_sim_array
 
     # Negative similarities (vectorized)
     if disliked_ids and cand_matrix.size > 0:
-        dis_item_vectors_list = [v for i in disliked_ids if (v := _fetch_vec_cached(i)) is not None and np.any(v)]
+        dis_item_vectors_list = [
+            v
+            for i in disliked_ids
+            if (v := _fetch_vec_cached(i)) is not None and np.any(v)
+        ]
         if dis_item_vectors_list:
             dis_matrix = np.stack(dis_item_vectors_list)
             # Shape: (num_candidates, num_disliked_items)
-            neg_sim_matrix_pairwise = _vectorized_cosine_similarity_pairwise(cand_matrix, dis_matrix)
+            neg_sim_matrix_pairwise = _vectorized_cosine_similarity_pairwise(
+                cand_matrix, dis_matrix
+            )
             # Mean similarity to disliked items for each candidate
             # Ensure neg_sim_matrix_pairwise is not empty before mean
             if neg_sim_matrix_pairwise.size > 0:
-                 mean_neg_sim_array = np.mean(neg_sim_matrix_pairwise, axis=1)
-                 scores_array -= beta * mean_neg_sim_array
+                mean_neg_sim_array = np.mean(neg_sim_matrix_pairwise, axis=1)
+                scores_array -= beta * mean_neg_sim_array
 
     # Base popularity
-    base_popularity_array = np.array([cand_meta.get(cid, {}).get("norm_rating", 0.0) for cid in ordered_cand_ids])
+    base_popularity_array = np.array(
+        [cand_meta.get(cid, {}).get("norm_rating", 0.0) for cid in ordered_cand_ids]
+    )
     scores_array += pop_w * base_popularity_array
 
     # Centroid similarities (vectorized)
     if liked_centroid_vec is not None and cand_matrix.size > 0:
-        sim_to_liked_centroid_array = _vectorized_cosine_similarity_pairwise(cand_matrix, liked_centroid_vec.reshape(1, -1)).flatten()
+        sim_to_liked_centroid_array = _vectorized_cosine_similarity_pairwise(
+            cand_matrix, liked_centroid_vec.reshape(1, -1)
+        ).flatten()
         scores_array += GAMMA_CENTROID_LIKE * sim_to_liked_centroid_array
 
     if disliked_centroid_vec is not None and cand_matrix.size > 0:
-        sim_to_disliked_centroid_array = _vectorized_cosine_similarity_pairwise(cand_matrix, disliked_centroid_vec.reshape(1, -1)).flatten()
+        sim_to_disliked_centroid_array = _vectorized_cosine_similarity_pairwise(
+            cand_matrix, disliked_centroid_vec.reshape(1, -1)
+        ).flatten()
         scores_array -= DELTA_CENTROID_DISLIKE * sim_to_disliked_centroid_array
 
     # Convert scores array back to dictionary
-    scores: Dict[str, float] = {cid: scores_array[i] for i, cid in enumerate(ordered_cand_ids)}
+    scores: Dict[str, float] = {
+        cid: scores_array[i] for i, cid in enumerate(ordered_cand_ids)
+    }
     log.info(f"Initial scoring completed for {len(scores)} candidates.")
 
     # --- 2. Pseudo Label Propagation ---
     if PROPAGATION_ITERATIONS > 0 and PROPAGATION_K_NEIGHBORS > 0 and len(scores) > 1:
         # Pass only vectors of items that actually have scores
         candidate_vectors_for_propagation = {
-            cid: cand_vec[cid] for cid in scores.keys() if cid in cand_vec and cand_vec[cid] is not None
+            cid: cand_vec[cid]
+            for cid in scores.keys()
+            if cid in cand_vec and cand_vec[cid] is not None
         }
-        if candidate_vectors_for_propagation: # Ensure there are vectors to propagate with
-            scores = _pseudo_label_propagation( # This calls the modified _pseudo_label_propagation
+        if (
+            candidate_vectors_for_propagation
+        ):  # Ensure there are vectors to propagate with
+            scores = _pseudo_label_propagation(  # This calls the modified _pseudo_label_propagation
                 scores,
                 candidate_vectors_for_propagation,
                 PROPAGATION_ITERATIONS,
                 PROPAGATION_K_NEIGHBORS,
                 PROPAGATION_ALPHA_MIX,
                 PROPAGATION_HOP2_DAMPING,
-                log
+                log,
             )
             log.info("Pseudo-label propagation applied.")
         else:
-            log.info("Skipped propagation as no candidate vectors were available for scored items.")
+            log.info(
+                "Skipped propagation as no candidate vectors were available for scored items."
+            )
     else:
-        log.info("Skipping pseudo-label propagation based on settings or candidate count.")
+        log.info(
+            "Skipping pseudo-label propagation based on settings or candidate count."
+        )
 
     # --- 3. Filtering ---
     def _keep(mid: str) -> bool:
         m = cand_meta.get(mid, {})
         if not m and mid in scores:
-            log.warning(f"Metadata missing for candidate {mid}, will likely be filtered out by criteria.")
-        if min_year and (m.get("year") or 0) < min_year: return False
-        if min_rating and (m.get("rating") or 0) < min_rating: return False
-        if min_norm and (m.get("norm_rating") or 0) < min_norm: return False
-        if min_votes and (m.get("votes") or 0) < min_votes: return False
+            log.warning(
+                f"Metadata missing for candidate {mid}, will likely be filtered out by criteria."
+            )
+        if min_year and (m.get("year") or 0) < min_year:
+            return False
+        if min_rating and (m.get("rating") or 0) < min_rating:
+            return False
+        if min_norm and (m.get("norm_rating") or 0) < min_norm:
+            return False
+        if min_votes and (m.get("votes") or 0) < min_votes:
+            return False
         meta_genres = m.get("genres", [])
-        if not isinstance(meta_genres, list): meta_genres = []
+        if not isinstance(meta_genres, list):
+            meta_genres = []
         meta_countries = m.get("countries", [])
-        if not isinstance(meta_countries, list): meta_countries = []
+        if not isinstance(meta_countries, list):
+            meta_countries = []
         meta_languages = m.get("languages", [])
-        if not isinstance(meta_languages, list): meta_languages = []
-        if include_genres and not set(meta_genres).intersection(include_genres): return False
-        if include_countries and not set(meta_countries).intersection(include_countries): return False
-        if include_languages and not set(meta_languages).intersection(include_languages): return False
-        if exclude_genres and set(meta_genres).intersection(exclude_genres): return False
-        if exclude_countries and set(meta_countries).intersection(exclude_countries): return False
-        if exclude_languages and set(meta_languages).intersection(exclude_languages): return False
+        if not isinstance(meta_languages, list):
+            meta_languages = []
+        if include_genres and not set(meta_genres).intersection(include_genres):
+            return False
+        if include_countries and not set(meta_countries).intersection(
+            include_countries
+        ):
+            return False
+        if include_languages and not set(meta_languages).intersection(
+            include_languages
+        ):
+            return False
+        if exclude_genres and set(meta_genres).intersection(exclude_genres):
+            return False
+        if exclude_countries and set(meta_countries).intersection(exclude_countries):
+            return False
+        if exclude_languages and set(meta_languages).intersection(exclude_languages):
+            return False
         return True
 
     ids_passing_filters = [cid for cid in scores.keys() if _keep(cid)]
@@ -562,6 +663,7 @@ def _recommend_inner(
         return []
     log.info(f"{len(ids_passing_filters)} candidates remaining after filtering.")
     scores_for_mmr = {mid: scores[mid] for mid in ids_passing_filters}
+
     def _mmr_ranking_inner(
         scores_subset: Dict[str, float],
         k_mmr: int,
@@ -570,15 +672,17 @@ def _recommend_inner(
         selected_ids: List[str] = []
         candidate_pool_ids = set(scores_subset.keys())
         item_tokens = {cid: TOKENS.get(cid, set()) for cid in candidate_pool_ids}
-        nonlocal cand_vec # Assuming cand_vec is available from the outer scope
+        nonlocal cand_vec  # Assuming cand_vec is available from the outer scope
 
-        log.debug(f"MMR starting with {len(candidate_pool_ids)} candidates for top {k_mmr}.")
+        log.debug(
+            f"MMR starting with {len(candidate_pool_ids)} candidates for top {k_mmr}."
+        )
 
         # Pre-fetch vectors for selected items to optimize inner loop
         selected_vectors_map: Dict[str, np.ndarray] = {}
 
         while candidate_pool_ids and len(selected_ids) < k_mmr:
-            best_candidate_id, best_mmr_score = None, -float('inf')
+            best_candidate_id, best_mmr_score = None, -float("inf")
 
             # Prepare selected vectors matrix for efficient computation if any are selected
             # This matrix will be (num_selected, D)
@@ -587,12 +691,19 @@ def _recommend_inner(
 
             # Efficiently get vectors for currently selected items
             # This list will grow with each selected item
-            current_selected_vecs_list = [selected_vectors_map[s_id] for s_id in selected_ids if s_id in selected_vectors_map and selected_vectors_map[s_id] is not None]
+            current_selected_vecs_list = [
+                selected_vectors_map[s_id]
+                for s_id in selected_ids
+                if s_id in selected_vectors_map
+                and selected_vectors_map[s_id] is not None
+            ]
             selected_matrix = None
             if current_selected_vecs_list:
                 try:
                     selected_matrix = np.stack(current_selected_vecs_list)
-                except ValueError: # Should not happen if vectors are consistently shaped
+                except (
+                    ValueError
+                ):  # Should not happen if vectors are consistently shaped
                     log.warning("MMR: Inconsistent vector shapes for selected items.")
                     selected_matrix = None
 
@@ -607,32 +718,44 @@ def _recommend_inner(
                     # Token-based diversity (remains the same, as it's not easily vectorized with current _sim_meta)
                     if item_tokens.get(cid):
                         token_diversity_penalty = max(
-                            (_sim_meta(item_tokens[cid], item_tokens.get(s_id, set())) # Use .get for safety
-                             for s_id in selected_ids),
-                            default=0.0
+                            (
+                                _sim_meta(
+                                    item_tokens[cid], item_tokens.get(s_id, set())
+                                )  # Use .get for safety
+                                for s_id in selected_ids
+                            ),
+                            default=0.0,
                         )
 
                     # Embedding-based diversity penalty (vectorized)
-                    if current_cand_vector is not None and selected_matrix is not None and selected_matrix.size > 0:
+                    if (
+                        current_cand_vector is not None
+                        and selected_matrix is not None
+                        and selected_matrix.size > 0
+                    ):
                         # Calculate cosine similarities between current_cand_vector and all in selected_matrix
                         # _vectorized_cosine_similarity_pairwise expects two matrices.
                         # current_cand_vector (D,) -> reshape to (1, D)
                         # selected_matrix (num_selected, D)
-                        sims_to_selected = _vectorized_cosine_similarity_pairwise(
-                            current_cand_vector.reshape(1, -1),
-                            selected_matrix
-                        ).flatten() # Result is (1, num_selected), flatten to (num_selected,)
+                        sims_to_selected = (
+                            _vectorized_cosine_similarity_pairwise(
+                                current_cand_vector.reshape(1, -1), selected_matrix
+                            ).flatten()
+                        )  # Result is (1, num_selected), flatten to (num_selected,)
 
                         if sims_to_selected.size > 0:
                             embedding_diversity_penalty = np.max(sims_to_selected)
-                        else: # Should not happen if selected_matrix was not None and not empty
+                        else:  # Should not happen if selected_matrix was not None and not empty
                             embedding_diversity_penalty = 0.0
 
                 combined_diversity_penalty = (
-                    MMR_EMBEDDING_DIVERSITY_WEIGHT * embedding_diversity_penalty +
-                    (1 - MMR_EMBEDDING_DIVERSITY_WEIGHT) * token_diversity_penalty
+                    MMR_EMBEDDING_DIVERSITY_WEIGHT * embedding_diversity_penalty
+                    + (1 - MMR_EMBEDDING_DIVERSITY_WEIGHT) * token_diversity_penalty
                 )
-                current_mmr_value = lambda_mmr * relevance_score - (1 - lambda_mmr) * combined_diversity_penalty
+                current_mmr_value = (
+                    lambda_mmr * relevance_score
+                    - (1 - lambda_mmr) * combined_diversity_penalty
+                )
 
                 if current_mmr_value > best_mmr_score:
                     best_candidate_id, best_mmr_score = cid, current_mmr_value
@@ -645,17 +768,19 @@ def _recommend_inner(
             candidate_pool_ids.remove(best_candidate_id)
 
             # Cache the vector of the newly selected item
-            if best_candidate_id not in selected_vectors_map and best_candidate_id in cand_vec:
+            if (
+                best_candidate_id not in selected_vectors_map
+                and best_candidate_id in cand_vec
+            ):
                 selected_vectors_map[best_candidate_id] = cand_vec[best_candidate_id]
 
-            log.debug(f"MMR selected: {best_candidate_id} (score: {best_mmr_score:.4f}). {len(selected_ids)}/{k_mmr} selected.")
+            log.debug(
+                f"MMR selected: {best_candidate_id} (score: {best_mmr_score:.4f}). {len(selected_ids)}/{k_mmr} selected."
+            )
         return selected_ids
+
     # --- 4. MMR with Combined Diversity (Inner Function) ---
-    top_diverse_ids = _mmr_ranking_inner(
-        scores_for_mmr,
-        top_k,
-        MMR_LAMBDA
-    )
+    top_diverse_ids = _mmr_ranking_inner(scores_for_mmr, top_k, MMR_LAMBDA)
     log.info(f"MMR ranking finished, {len(top_diverse_ids)} diverse recommendations.")
 
     # --- 5. Prepare Output ---

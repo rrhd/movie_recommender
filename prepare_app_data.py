@@ -113,7 +113,6 @@ def main():
         logger.error(f"Failed to save app data to {APP_DATA_OUTPUT_PKL}: {e}")
         return
 
-
     logger.info("Data preparation complete.")
 
 

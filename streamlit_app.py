@@ -8,6 +8,7 @@ streamlit_app.py  –  front-end for the Pinecone movie recommender.
 │ 4. Hit **✨ Recommend** – enjoy clickable results.                       │
 ╰──────────────────────────────────────────────────────────────────────────╯
 """
+
 import logging
 from pathlib import Path
 from typing import Dict, Tuple

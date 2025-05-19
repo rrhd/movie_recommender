@@ -190,7 +190,7 @@ def fuzzy_match_one(
     raw = q.strip()
     ql = raw.lower().strip()
     ql = ql.replace("&", " and ").replace("’", "'").replace("-", " ")
-    ql = re.sub(r'\s+', ' ', ql).strip()
+    ql = re.sub(r"\s+", " ", ql).strip()
     if not ql:
         return None, None, 0.0
 
@@ -198,7 +198,7 @@ def fuzzy_match_one(
     m = re.search(r"\b(19|20)\d{2}\b", ql)
     if m:
         year = int(m.group())
-        ql = ql[: m.start()] + ql[m.end():]
+        ql = ql[: m.start()] + ql[m.end() :]
         ql = ql.strip().strip("():-")
 
     bare = _strip_articles(ql)
@@ -269,7 +269,12 @@ def fuzzy_match_one(
     if year is not None and matched_year != year:
         return None, None, 0.0
 
-    return matched_id, _ORIG_MAP.get(matched_id, _ID2LC[matched_id].title()), float(sims[i])
+    return (
+        matched_id,
+        _ORIG_MAP.get(matched_id, _ID2LC[matched_id].title()),
+        float(sims[i]),
+    )
+
 
 def match_many(queries: Iterable[str]) -> Tuple[List[Tuple[str, str]], List[str]]:
     ok, miss = [], []

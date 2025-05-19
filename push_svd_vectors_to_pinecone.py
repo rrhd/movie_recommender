@@ -52,7 +52,7 @@ META_PATH = ARTIFACTS_DIR / "enriched_movies.pkl"
 ZSCORE_DB_PATH = ARTIFACTS_DIR / "movie_database.db"
 
 SECRETS_FILE = Path(__file__).parent / ".streamlit" / "secrets.toml"
-BATCH_SZ = 100 # Keep batch size reasonable for both fetch and upsert
+BATCH_SZ = 100  # Keep batch size reasonable for both fetch and upsert
 SPEC = ServerlessSpec(cloud="aws", region="us-east-1")
 METRIC = "cosine"
 
@@ -82,7 +82,7 @@ def ensure_index(pc: Pinecone, name: str, dim: int) -> None:
                     break
             except PineconeException as e:
                 print(f"  … waiting for index, error describing: {e}")
-            print(f"  … waiting {waited+5}s for index to be ready")
+            print(f"  … waiting {waited + 5}s for index to be ready")
             time.sleep(5)
         else:
             sys.exit("[ERR] index creation timeout or error checking status.")
@@ -221,7 +221,9 @@ def main() -> None:
     index = pc.Index(index_name)
 
     total_items_to_process = vecs.shape[0]
-    print(f"[UPSERT CHECK] {total_items_to_process} total local items ({dim}-d) for index '{index_name}'")
+    print(
+        f"[UPSERT CHECK] {total_items_to_process} total local items ({dim}-d) for index '{index_name}'"
+    )
 
     actually_uploaded_count = 0
     processed_count = 0
@@ -258,14 +260,18 @@ def main() -> None:
                 if fetch_response and fetch_response.vectors:
                     existing_ids_in_pinecone.update(fetch_response.vectors.keys())
             except PineconeException as e:
-                print(f"\n[WARN] Fetching IDs failed for a batch: {e}. Will attempt to upsert all in this batch as a fallback.")
+                print(
+                    f"\n[WARN] Fetching IDs failed for a batch: {e}. Will attempt to upsert all in this batch as a fallback."
+                )
                 existing_ids_in_pinecone.clear()
             except Exception as e:
-                print(f"\n[WARN] Non-Pinecone error during fetch: {e}. Will attempt to upsert all in this batch.")
+                print(
+                    f"\n[WARN] Non-Pinecone error during fetch: {e}. Will attempt to upsert all in this batch."
+                )
                 existing_ids_in_pinecone.clear()
 
         payload_to_upsert = []
-        for imdb_id_to_eval in batch_ids_to_check: # Renamed for clarity
+        for imdb_id_to_eval in batch_ids_to_check:  # Renamed for clarity
             if imdb_id_to_eval not in existing_ids_in_pinecone:
                 payload_to_upsert.append(potential_payload_map[imdb_id_to_eval])
 
@@ -276,17 +282,28 @@ def main() -> None:
                 index.upsert(payload_to_upsert)
                 actually_uploaded_count += len(payload_to_upsert)
             except PineconeException as e:
-                print(f"\n[ERR] upsert failed for a batch of {len(payload_to_upsert)} items: {e}")
-                print(f"Problematic batch IDs (first 5): {[item[0] for item in payload_to_upsert[:5]]}")
+                print(
+                    f"\n[ERR] upsert failed for a batch of {len(payload_to_upsert)} items: {e}"
+                )
+                print(
+                    f"Problematic batch IDs (first 5): {[item[0] for item in payload_to_upsert[:5]]}"
+                )
                 sys.exit(f"\n[ERR] Critical upsert failure after filtering. Exiting.")
             except Exception as e:
                 print(f"\n[ERR] Non-Pinecone error during upsert: {e}")
                 sys.exit(f"\n[ERR] Critical non-Pinecone upsert failure. Exiting.")
 
         processed_count += len(batch_ids_to_check)
-        print(f"  … processed: {processed_count}/{total_items_to_process}, new items uploaded: {actually_uploaded_count}", end="\r", flush=True)
+        print(
+            f"  … processed: {processed_count}/{total_items_to_process}, new items uploaded: {actually_uploaded_count}",
+            end="\r",
+            flush=True,
+        )
 
-    print(f"\n[DONE] All {total_items_to_process} local items processed. {actually_uploaded_count} new items uploaded. ✔")
+    print(
+        f"\n[DONE] All {total_items_to_process} local items processed. {actually_uploaded_count} new items uploaded. ✔"
+    )
+
 
 if __name__ == "__main__":
     main()
